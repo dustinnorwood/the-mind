@@ -270,7 +270,7 @@ cpuStatTimeLineChart = do
       & chartOptions_yAxis .~ (def
         & axis_type ?~ AxisType_Value
         & axis_min ?~ Left 0
-        & axis_max ?~ Left 101
+        & axis_max ?~ Left 1001
                               ) : []
       & chartOptions_xAxis .~ (def
         & axis_type ?~ AxisType_Time) : []
@@ -315,7 +315,7 @@ cpuStatGenData = do
       rVals <- liftIO $ replicateM 10 $
         getStdRandom (randomR (-10, 10))
       let
-        f i v = min 100 (max 0 (v + (rVals !! i)))
+        f i v = min 1000 (max 0 (v + (rVals !! i)))
         s = CpuStat
           { _cpuStat_user = f 0 $ _cpuStat_user c
           , _cpuStat_nice = f 1 $ _cpuStat_nice c

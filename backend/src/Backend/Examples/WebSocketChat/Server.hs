@@ -1,15 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE TemplateHaskell #-}
 
 module Backend.Examples.WebSocketChat.Server where
 
 import           Control.Concurrent (MVar, modifyMVar, modifyMVar_,
                                      readMVar)
 import           Control.Exception  (finally)
+import           Control.Lens
 import           Control.Monad      (forM_, forever)
 import           Data.Aeson         (encode, decode)
 import qualified Data.ByteString    as B
 import           Data.ByteString.Lazy (toStrict)
 import           Data.Char          (isPunctuation, isSpace)
+import           Data.Foldable      (for_)
+import           Data.Map.Strict    (Map)
+import qualified Data.Map.Strict    as M
 import           Data.Semigroup     ((<>))
 import           Data.Text          (Text)
 import qualified Data.Text          as T
@@ -20,77 +26,78 @@ import qualified Network.WebSockets as WS
 import           Common.Examples.WebSocketChat.Message
 --------------------------------------------------------------------------------
 
-type Client = (Text, WS.Connection)
+send :: WS.Connection -> S2C -> IO ()
+send conn s2c = do
+  T.putStrLn . T.pack $ show s2c
+  WS.sendTextData conn . toStrict $ encode s2c
 
-type ServerState = [Client]
+broadcastGameUpdate :: Text -> GameState -> ServerState WS.Connection -> IO ()
+broadcastGameUpdate roomName gs ss = do
+  let roomClients = maybe M.empty _roomClients $ M.lookup roomName $ _rooms ss 
+  forM_ roomClients $ \c@(Client name _ conn) -> do
+    let s2c = S2CGameUpdate $ myGameState name gs
+    T.putStrLn $ "Sending to " <> name <> ": " <> (T.pack $ show s2c)
+    send conn s2c
 
-newServerState :: ServerState
-newServerState = []
+broadcast :: Text -> S2C -> ServerState WS.Connection -> IO ()
+broadcast roomName s2c ss = do
+  T.putStrLn . T.pack $ show s2c
+  let roomClients = maybe M.empty _roomClients $ M.lookup roomName $ _rooms ss 
+  forM_ roomClients $ \(Client _ _ conn) -> send conn s2c
 
-numClients :: ServerState -> Int
-numClients = length
-
-clientExists :: Client -> ServerState -> Bool
-clientExists client = any ((== fst client) . fst)
-
-addClient :: Client -> ServerState -> ServerState
-addClient client clients = client : clients
-
-removeClient :: Client -> ServerState -> ServerState
-removeClient client = filter ((/= fst client) . fst)
-
-broadcast :: Text -> ServerState -> IO ()
-broadcast message clients = do
-    T.putStrLn message
-    -- forM_ clients $ \(_, conn) -> WS.sendTextData conn message
-    forM_ clients $ \(_, conn) -> WS.sendTextData conn $
-        (toStrict . encode . S2Cbroadcast) message
-
-application :: MVar ServerState -> WS.ServerApp
+application :: MVar (ServerState WS.Connection) -> WS.ServerApp
 application state pending = do
-    conn <- WS.acceptRequest pending
-    WS.forkPingThread conn 30
-    msgbs <- WS.receiveData conn :: IO B.ByteString
-    let msgC = decode $ WS.toLazyByteString msgbs :: Maybe C2S
-        -- msg = case msgC of
-        --     Just (C2Sjoin txt) -> txt
-        --     Just C2Sclose      -> "close msg"
-        --     Just (C2Smsg txt)  -> txt
-        --     Nothing            -> "hmm nothing"
-    -- T.putStrLn $ "msg = " <> msg
-    clients <- readMVar state
-    case msgC of
-        Nothing           ->
-            T.putStrLn "Decoded msgC is nothing..."
-        Just (C2Smsg txt) ->
-            T.putStrLn $ "C2Smsg should not happen here, txt =" <> txt
-        Just C2Sclose     ->
-            T.putStrLn "C2Sclose should never happen here..."
-        Just (C2Sjoin nm) ->
-          case nm of
-              _ | any ($ nm) [T.null, T.any isPunctuation, T.any isSpace] -> do
-                        T.putStrLn $ ":" <> nm <> ":"
-                        WS.sendTextData conn $ (toStrict . encode) S2Cnameproblem
-                | clientExists client clients ->
-                    WS.sendTextData conn $ (toStrict . encode) S2Cuserexists
-                | otherwise -> flip finally disconnect $ do
-                   modifyMVar_ state $ \s -> do
-                       let s' = addClient client s
-                       WS.sendTextData conn $ (toStrict . encode . S2Cwelcome) $
-                           T.intercalate ", " (map fst s)
-                       broadcast (nm <> " joined") s'
-                       return s'
-                   talk conn state client
-          where
-            client     = (nm,conn)
-            disconnect = do
-                -- Remove client and return new state
-                s <- modifyMVar state $ \s ->
-                    let s' = removeClient client s in return (s', s')
-                broadcast (fst client <> " disconnected") s
+  conn <- WS.acceptRequest pending
+  WS.forkPingThread conn 30
+  lobby state conn
 
-talk :: WS.Connection -> MVar ServerState -> Client -> IO ()
-talk conn state (user, _) = forever $ do
+lobby :: MVar (ServerState WS.Connection) -> WS.Connection -> IO ()
+lobby state conn = do
+  msgbs <- WS.receiveData conn :: IO B.ByteString
+  let msgC = decode $ WS.toLazyByteString msgbs :: Maybe C2S
+  case msgC of
+      Nothing           ->
+          T.putStrLn "Decoded msgC is nothing..."
+      Just (C2SCreateRoom pName rc) -> do
+        mState <- readMVar state
+        let name = _roomName rc
+        case M.lookup name $ _rooms mState of
+          Just _ -> do
+            send conn $ S2CRoomAlreadyExists name
+            lobby state conn
+          Nothing -> do
+            let c = Client pName name conn
+            (ss', r) <- modifyMVar state $ \s ->
+              let r = newRoom rc c
+                  f = rooms %~ M.insert name r
+                  s' = f s
+                in pure (s', (s', r))
+            let rs = RoomSummary name (M.keys $ _roomClients r) Nothing
+            broadcast name (S2CRoomUpdate rs) ss'
+            talk state c 
+      Just (C2SJoinRoom pName rc) -> do
+        mState <- readMVar state
+        let name = _roomName rc
+        case M.lookup name $ _rooms mState of
+          Nothing -> do
+            send conn $ S2CRoomDoesntExist rc
+            lobby state conn
+          Just r | _roomConfig r == rc -> do
+            let c = Client pName name conn
+            ss' <- modifyMVar state $ \s ->
+              let s' = addClient c name s
+                in pure (s', s')
+            let r' = M.lookup name $ _rooms ss'
+            let myGS = myGameState pName <$>  (_roomGameState =<< r')
+            let rs = RoomSummary name (maybe [] (M.keys . _roomClients) r') myGS
+            broadcast name (S2CRoomUpdate rs) ss'
+            talk state c
+      Just msg -> do
+        T.putStrLn $ "Got unexpected message: " <> T.pack (show msg)
+        lobby state conn
+
+talk :: MVar (ServerState WS.Connection) -> Client WS.Connection -> IO ()
+talk state c@(Client user room conn) = flip finally disconnect . forever $ do
     msgbs <- WS.receiveData conn :: IO B.ByteString
     case decode $ WS.toLazyByteString msgbs of
         Nothing           ->
@@ -99,7 +106,50 @@ talk conn state (user, _) = forever $ do
             undefined -- TBD
         Just (C2Sjoin nm) ->
             T.putStrLn $ "C2Sjoin should not happen here, nm =" <> nm
-        Just (C2Smsg txt) ->
-            readMVar state >>= broadcast (user <> ": " <> txt)
+        Just (C2SChat txt) ->
+            readMVar state >>= broadcast room (S2Cbroadcast $ user <> ": " <> txt)
+        Just C2SStartGame -> do
+          mr <- M.lookup room . _rooms <$> readMVar state
+          case mr of
+            Nothing -> send conn $ S2CRoomDoesntExist $ RoomConfig room ""
+            Just r -> do
+              let ps = take 6 . M.keys $ _roomClients r
+              gs <- newGame ps
+              st <- modifyMVar state $ \s -> do
+                let s' = (rooms . at room . _Just . roomGameState ?~ gs) s
+                pure (s', s')
+              broadcastGameUpdate room gs st
+
+        Just (C2SVoteStar didVote) -> do
+          T.putStrLn . T.pack $ "C2SVoteStar " ++ show didVote
+          mr <- M.lookup room . _rooms <$> readMVar state
+          case _roomGameState <$> mr of
+            Nothing -> send conn $ S2CRoomDoesntExist $ RoomConfig room ""
+            Just Nothing -> send conn $ S2CGameNotStarted
+            Just (Just gs) -> do
+              let gs' = voteStar user gs
+              st <- modifyMVar state $ \s -> do
+                let s' = (rooms . at room . _Just . roomGameState ?~ gs') s
+                pure (s', s')
+              broadcastGameUpdate room gs' st
+
+        Just C2SPlayCard -> do
+          T.putStrLn "C2SPlayCard"
+          mr <- M.lookup room . _rooms <$> readMVar state
+          case _roomGameState <$> mr of
+            Nothing -> send conn $ S2CRoomDoesntExist $ RoomConfig room ""
+            Just Nothing -> send conn $ S2CGameNotStarted
+            Just (Just gs) -> do
+              gs' <- playCard user gs
+              st <- modifyMVar state $ \s -> do
+                let s' = (rooms . at room . _Just . roomGameState ?~ gs') s
+                pure (s', s')
+              broadcastGameUpdate room gs' st
+  where
+    disconnect = do
+        -- Remove client and return new state
+        s <- modifyMVar state $ \s ->
+            let s' = removeClient c s in return (s', s')
+        broadcast room (S2Cbroadcast $ user <> " disconnected") s
 
 

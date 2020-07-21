@@ -40,10 +40,9 @@ frontend = Frontend
   { _frontend_head = pageHead
   , _frontend_body = do
       r <- liftIO $ Cfg.get "config/common/route"
-      el "header" $ nav
-      el "main" $ article $ subRoute_ $ \case
-        FrontendRoute_Home -> home
-        FrontendRoute_Examples -> maybeRoute_ home $ examples r =<< askRoute
+      el "main" $ WebSocketChat.app r -- subRoute_ $ \case
+        -- FrontendRoute_Home -> home
+        -- FrontendRoute_Examples -> maybeRoute_ home $ examples r =<< askRoute
       return ()
   }
 
@@ -72,17 +71,3 @@ examples route _ = subRoute_ $ \case
   Example_ECharts -> ECharts.app route
   Example_WebSocketEcho -> WebSocketEcho.app
   Example_WebSocketChat -> WebSocketChat.app route
-
--- | An @<article>@ tag that will set its title and the class of its child
--- @<section>@ based on the current route
-article
-  :: ( DomBuilder t m
-     , Routed t (R FrontendRoute) m
-     , PostBuild t m
-     )
-  => m () -- ^ Article content widget
-  -> m ()
-article c = el "article" $ do
-  r <- askRoute
-  el "h3" $ dynText $ routeDescription <$> r
-  divClass "" c
