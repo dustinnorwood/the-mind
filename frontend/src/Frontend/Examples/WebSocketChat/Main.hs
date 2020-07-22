@@ -211,6 +211,9 @@ gameWidget s2cEv rn initGS = el "div" $ do
           elClass "div" "stat-wrapper" $ do
             elClass "div" "stat-name" $ text "Throwing Stars: "
             elClass "div" "stat-value" $ dynText $ T.pack . show . _myStars <$> gameDyn
+          elClass "div" "stat-wrapper" $ do
+            elClass "div" "stat-name" $ text "Last Card Played: "
+            elClass "div" "stat-value" $ dynText $ maybe "Nothing" (T.pack . show) . _myLastPlayedCard <$> gameDyn
         void $ elClass "div" "player-stats-wrapper" $ do
           let playersDyn = _myTeam <$> gameDyn
           listWithKey playersDyn $ \name playerStateDyn -> do
@@ -244,7 +247,7 @@ gameWidget s2cEv rn initGS = el "div" $ do
   where isGameStateChange = \case
           S2CGameUpdate gs -> Just gs
           _ -> Nothing
-        initialGameState = MyGameState "Dustin" 4 2 1 [27, 35, 36, 41] $ M.fromList
+        initialGameState = MyGameState "Dustin" 4 2 1 Nothing [27, 35, 36, 41] $ M.fromList
           [ ("Dustin", PlayerSummary 4 True Nothing)
           , ("Dan", PlayerSummary 3 False (Just 7))
           , ("Jonathan", PlayerSummary 2 True (Just 34))

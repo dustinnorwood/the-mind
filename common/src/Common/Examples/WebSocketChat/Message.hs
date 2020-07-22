@@ -44,6 +44,7 @@ data GameState = GameState
   { _level :: Int
   , _lives :: Int
   , _stars :: Int
+  , _lastCard :: Maybe Int
   , _players :: Map Text PlayerState 
   } deriving (Eq, Show, Generic)
 makeLenses ''GameState
@@ -60,6 +61,7 @@ data MyGameState = MyGameState
   , _myLevel :: Int
   , _myLives :: Int
   , _myStars :: Int
+  , _myLastPlayedCard :: Maybe Int
   , _myCards :: [Int]
   , _myTeam  :: Map Text PlayerSummary
   } deriving (Eq, Show, Generic)
@@ -93,6 +95,7 @@ nextLevel gs = do
   ps <- newLevel levelNum playerNames
   pure $ gs & level .~ levelNum
             & players .~ ps
+            & lastCard .~ Nothing
 
 loseLife :: GameState -> IO GameState
 loseLife gs = do
@@ -115,7 +118,7 @@ newGame playerNames = do
       lives = numLives $ length playerNames
       stars = 1
   playerStates <- newLevel 1 playerNames
-  pure $ GameState lev lives stars playerStates
+  pure $ GameState lev lives stars Nothing playerStates
 
 getTopCard :: PlayerState -> Maybe Int
 getTopCard = listToMaybe . _cards
@@ -136,17 +139,25 @@ minimumCard = (\x -> if x < 101 then Just x else Nothing)
 remainingCards :: GameState -> Int
 remainingCards = sum . map (length . _cards) . M.elems . _players
 
+trimCards :: Maybe Int -> GameState -> GameState
+trimCards mCard gs = case mCard of
+  Nothing -> gs
+  Just c -> let ps = _players gs
+                ps' = M.map (cards %~ filter (> c)) ps
+             in gs & players .~ ps'
+
 playCard :: Text -> GameState -> IO GameState
 playCard name gs =
   let playerCard = getTopCardForPlayer name gs
       nextCard = minimumCard gs
-   in if nextCard == playerCard
-        then let gs' = gs & players . at name . mapped . cards %~ tail
-                          & players . at name . mapped . showingTop .~ False
-              in if remainingCards gs' == 0
-                   then nextLevel gs'
-                   else pure gs'
-        else loseLife gs
+      gs' = gs & players . at name . mapped . cards %~ tail
+               & players . at name . mapped . showingTop .~ False
+               & lastCard .~ playerCard
+      gs'' = if nextCard == playerCard then gs' else gs & lives -~ 1
+                                                        & trimCards playerCard
+   in if remainingCards gs'' == 0
+        then nextLevel gs''
+        else pure gs''
 
 useStar :: GameState -> GameState
 useStar gs = if _stars gs <= 0
@@ -169,6 +180,7 @@ myGameState name GameState{..} =
       _myLevel = _level
       _myLives = _lives
       _myStars = _stars
+      _myLastPlayedCard = _lastCard
       _myCards = maybe [] _cards $ M.lookup name _players
       f PlayerState{..} = PlayerSummary
                             (length _cards)
