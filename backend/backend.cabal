@@ -13,6 +13,7 @@ library
                , common
                , dependent-sum
                , frontend
+               , lens
                , obelisk-backend
                , obelisk-route
                , text

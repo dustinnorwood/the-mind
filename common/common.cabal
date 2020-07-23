@@ -7,9 +7,12 @@ library
   hs-source-dirs: src
   build-depends: base
                , aeson
+               , containers
                , dependent-sum
-               , obelisk-route
+               , lens
                , mtl
+               , obelisk-route
+               , QuickCheck
                , text
 
   exposed-modules:
