@@ -13,7 +13,7 @@ import           Data.Aeson (ToJSON, FromJSON, toEncoding, parseJSON,
                             defaultOptions, Options,
                             genericToEncoding, genericParseJSON)
 import           Data.Foldable (foldrM)
-import           Data.List (sort)
+import           Data.List (partition, sort)
 import           Data.Map.Strict (Map)
 import qualified Data.Map.Strict as M
 import           Data.Maybe
@@ -88,6 +88,14 @@ newLevel levelNum playerNames = deck
               two = at name . mapped . cards %~ sort . (num:) 
            in one *** two
 
+awardLife :: Int -> GameState -> GameState
+awardLife l | l == 3 || l == 6 || l == 9 = lives +~ 1
+            | otherwise = id
+
+awardStar :: Int -> GameState -> GameState
+awardStar l | l == 2 || l == 5 || l == 8 = stars +~ 1
+            | otherwise = id
+
 nextLevel :: GameState -> IO GameState
 nextLevel gs = do
   let levelNum = 1 + _level gs
@@ -96,6 +104,8 @@ nextLevel gs = do
   pure $ gs & level .~ levelNum
             & players .~ ps
             & lastCard .~ Nothing
+            & awardLife levelNum
+            & awardStar levelNum
 
 loseLife :: GameState -> IO GameState
 loseLife gs = do
@@ -145,6 +155,7 @@ trimCards mCard gs = case mCard of
   Just c -> let ps = _players gs
                 ps' = M.map (cards %~ filter (> c)) ps
              in gs & players .~ ps'
+                   & lastCard ?~ c
 
 playCard :: Text -> GameState -> IO GameState
 playCard name gs =

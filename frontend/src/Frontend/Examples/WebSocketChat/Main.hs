@@ -112,15 +112,15 @@ loginWidget
   => m (Event t C2S)
 loginWidget = el "div" $ do
   rec
-    tUser <- inputElement $ def
+    tUser <- el "div" . inputElement $ def
       & inputElementConfig_setValue .~ fmap (const "") eSubmit
       & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
         ("placeholder" =: "Enter Username")
-    tName <- inputElement $ def
+    tName <- el "div" . inputElement $ def
       & inputElementConfig_setValue .~ fmap (const "") eSubmit
       & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
         ("placeholder" =: "Enter room name")
-    tPass <- inputElement $ def
+    tPass <- el "div" . inputElement $ def
       & inputElementConfig_setValue .~ fmap (const "") eSubmit
       & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
         ("placeholder" =: "Enter password")
@@ -201,29 +201,33 @@ gameWidget s2cEv rn initGS = el "div" $ do
         void $ elClass "div" "room-name" $ text $ "Room: " <> rn
         void $ elClass "div" "stats-wrapper" $ do
           elClass "div" "stat-wrapper" $ do
-            elClass "div" "stat-name" $ text "Player: "
-            elClass "div" "stat-value" $ dynText $ _myName <$> gameDyn
+            {- elClass "div" "stat-name" $ -}  text "Player: "
+            {- elClass "div" "stat-value" $ -} dynText $ _myName <$> gameDyn
           elClass "div" "stat-wrapper" $ do
-            elClass "div" "stat-name" $ text "Level: "
-            elClass "div" "stat-value" $ dynText $ T.pack . show . _myLevel <$> gameDyn
+            {- elClass "div" "stat-name" $ -}  text "Level: "
+            {- elClass "div" "stat-value" $ -} dynText $ T.pack . show . _myLevel <$> gameDyn
           elClass "div" "stat-wrapper" $ do
-            elClass "div" "stat-name" $ text "Lives: "
-            elClass "div" "stat-value" $ dynText $ T.pack . show . _myLives <$> gameDyn
+            {- elClass "div" "stat-name" $ -}  text "Lives: "
+            {- elClass "div" "stat-value" $ -} dynText $ T.pack . show . _myLives <$> gameDyn
           elClass "div" "stat-wrapper" $ do
-            elClass "div" "stat-name" $ text "Throwing Stars: "
-            elClass "div" "stat-value" $ dynText $ T.pack . show . _myStars <$> gameDyn
+            {- elClass "div" "stat-name" $ -}  text "Throwing Stars: "
+            {- elClass "div" "stat-value" $ -} dynText $ T.pack . show . _myStars <$> gameDyn
           elClass "div" "stat-wrapper" $ do
             elClass "div" "stat-name" $ text "Last Card Played: "
-            elClass "div" "stat-value" $ dynText $ maybe "Nothing" (T.pack . show) . _myLastPlayedCard <$> gameDyn
+            elClass "div" "stat-value" . el "h1" $ dynText $ maybe "Nothing" (T.pack . show) . _myLastPlayedCard <$> gameDyn
         void $ elClass "div" "player-stats-wrapper" $ do
           let playersDyn = _myTeam <$> gameDyn
           listWithKey playersDyn $ \name playerStateDyn -> do
-            elClass "div" "player-wrapper" $ do
-              elClass "div" "player-name" $ text name
-              elClass "div" "player-stat" $ do
-                elClass "div" "player-remaining-cards" $ do
-                  text "Cards: "
-                  dynText $ T.pack . show . _psNumCards <$> playerStateDyn
+            -- elClass "div" "player-wrapper" $ do
+                text $ name <> ": " --elClass "div" "player-name" $ text name
+                dynText $ T.pack . show . _psNumCards <$> playerStateDyn
+                text " card"
+                dynText $ bool "s" "" . (== 1) . _psNumCards <$> playerStateDyn
+                text " left"
+              --elClass "div" "player-stat" $ do
+                --elClass "div" "player-remaining-cards" $ do
+                  --text "Cards: "
+                  --dynText $ T.pack . show . _psNumCards <$> playerStateDyn
                 elClass "div" "player-top-card-and-vote" $ do
                   let topCardDyn = flip fmap playerStateDyn $ \ps -> do
                         case _psTopCard ps of
@@ -238,7 +242,7 @@ gameWidget s2cEv rn initGS = el "div" $ do
               restCardsDyn = flip fmap cardsDyn (\case
                 [] -> []
                 (_:xs) -> xs)
-          elClass "div" "player-next-card" $ dynText $ maybe "" (T.pack . show) <$> nextCardDyn
+          elClass "div" "player-next-card" . el "h1" $ dynText $ maybe "" (T.pack . show) <$> nextCardDyn
           elClass "ul" "player-rest-cards" $ simpleList restCardsDyn (el "li" . dynText . fmap (T.pack . show))
         playCard <- button "Play Card"
         voteStar <- button "Throw Star"
