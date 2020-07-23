@@ -150,7 +150,8 @@ startGameWidget s2cEv rs@(RoomSummary rn ps mGS) = case mGS of
   Nothing -> do
     let gameStartedEv = fmapMaybe gameStartEv s2cEv
     roomOrGame <- widgetHold (roomWidget s2cEv rs) (ffor gameStartedEv (gameWidget s2cEv rn))
-    pure . switch $ current roomOrGame
+    chatEv <- chatWidget s2cEv
+    pure $ leftmost  [switch $ current roomOrGame, chatEv]
   where
     gameStartEv = \case
       (S2CGameUpdate gs) -> Just gs
@@ -242,8 +243,7 @@ gameWidget s2cEv rn initGS = el "div" $ do
         playCard <- button "Play Card"
         voteStar <- button "Throw Star"
         pure (C2SPlayCard <$ playCard, C2SVoteStar True <$ voteStar)
-    chatEv <- chatWidget s2cEv
-  return $ leftmost [playCardEv, voteStarEv, chatEv]
+  return $ leftmost [playCardEv, voteStarEv]
   where isGameStateChange = \case
           S2CGameUpdate gs -> Just gs
           _ -> Nothing
@@ -265,7 +265,7 @@ chatWidget
 chatWidget s2cEv = el "div" $ do
   rec
     let eRecRespTxt = showMsg <$> s2cEv
-    receivedMessages <- foldDyn (\m ms -> ms ++ [m]) [] eRecRespTxt
+    receivedMessages <- foldDyn (\m ms -> Prelude.reverse $ Prelude.take 10 (m:Prelude.reverse ms)) [] eRecRespTxt
     void $ el "div" $ do
       el "p" $ text "Chat"
       el "ul" $ simpleList receivedMessages (\m -> el "li" $ dynText m)
