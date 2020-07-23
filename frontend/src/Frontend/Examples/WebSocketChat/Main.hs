@@ -264,7 +264,7 @@ chatWidget
   => Event t S2C -> m (Event t C2S)
 chatWidget s2cEv = el "div" $ do
   rec
-    let eRecRespTxt = showMsg <$> s2cEv
+    let eRecRespTxt = fmapMaybe showMsg s2cEv
     receivedMessages <- foldDyn (\m ms -> Prelude.reverse $ Prelude.take 10 (m:Prelude.reverse ms)) [] eRecRespTxt
     void $ el "div" $ do
       el "p" $ text "Chat"
@@ -276,17 +276,10 @@ chatWidget s2cEv = el "div" $ do
           $ leftmost [b, keypress Enter t]
   return $ C2SChat <$> newMessage
   where
-    showMsg :: S2C -> Text
+    showMsg :: S2C -> Maybe Text
     showMsg = \case
-      (S2Cbroadcast txt) -> txt
-      (S2Cwelcome txt)  -> "Welcome! Users: " <> txt
-      S2Cuserexists     -> "User already exists"
-      S2Cnameproblem    -> "Name cannot contain punctuation or "
-      S2CRoomDoesntExist rc -> T.pack $ show rc
-      S2CRoomAlreadyExists t -> t
-      S2CRoomUpdate r -> T.pack $ show r
-      S2CGameNotStarted -> "Game not started yet!"
-      S2CGameUpdate gs -> T.pack $ show gs
+      (S2Cbroadcast txt) -> Just txt
+      _ -> Nothing
 
 doFocus
   :: ( DomBuilder t m
