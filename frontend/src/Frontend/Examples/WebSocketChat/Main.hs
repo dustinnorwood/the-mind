@@ -336,7 +336,7 @@ chatWidget
      , Prerender js m
      )
   => Event t S2C -> m (Event t C2S)
-chatWidget s2cEv = elAttr "div" ("style" =: "position: fixed; height: 100%; right: 0%;") $ do
+chatWidget s2cEv = elAttr "div" ("style" =: "position: fixed; height: 100%; bottom: 0%; right: 0%;") $ do
   rec
     let eRecRespTxt = fmapMaybe showMsg s2cEv
     receivedMessages <- foldDyn (\m ms -> Prelude.reverse $ Prelude.take 20 (m:Prelude.reverse ms)) [] eRecRespTxt
