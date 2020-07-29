@@ -31,6 +31,16 @@ send conn s2c = do
   T.putStrLn . T.pack $ show s2c
   WS.sendTextData conn . toStrict $ encode s2c
 
+broadcastRoomUpdate :: Text -> Maybe GameState -> ServerState WS.Connection -> IO ()
+broadcastRoomUpdate roomName gs ss = do
+  let roomClients = maybe M.empty _roomClients $ M.lookup roomName $ _rooms ss 
+      clientNames = M.keys roomClients
+  forM_ roomClients $ \c@(Client name _ conn) -> do
+    let myGS = myGameState name <$> gs
+    let s2c = S2CRoomUpdate $ RoomSummary roomName clientNames myGS
+    T.putStrLn $ "Sending to " <> name <> ": " <> (T.pack $ show s2c)
+    send conn s2c
+
 broadcastGameUpdate :: Text -> GameState -> ServerState WS.Connection -> IO ()
 broadcastGameUpdate roomName gs ss = do
   let roomClients = maybe M.empty _roomClients $ M.lookup roomName $ _rooms ss 
@@ -73,9 +83,10 @@ lobby state conn = do
                   s' = f s
                 in pure (s', (s', r))
             let rs = RoomSummary name (M.keys $ _roomClients r) Nothing
-            broadcast name (S2CRoomUpdate rs) ss'
+            send conn (S2CRoomJoined rs)
             talk state c 
       Just (C2SJoinRoom pName rc) -> do
+        T.putStrLn $ "YO!" <> pName <> T.pack (show rc)
         mState <- readMVar state
         let name = _roomName rc
         case M.lookup name $ _rooms mState of
@@ -88,9 +99,11 @@ lobby state conn = do
               let s' = addClient c name s
                 in pure (s', s')
             let r' = M.lookup name $ _rooms ss'
-            let myGS = myGameState pName <$>  (_roomGameState =<< r')
+            let mGS = _roomGameState =<< r'
+            let myGS = myGameState pName <$> mGS
             let rs = RoomSummary name (maybe [] (M.keys . _roomClients) r') myGS
-            broadcast name (S2CRoomUpdate rs) ss'
+            send conn (S2CRoomJoined rs)
+            broadcastRoomUpdate name mGS ss'
             talk state c
       Just msg -> do
         T.putStrLn $ "Got unexpected message: " <> T.pack (show msg)
@@ -140,7 +153,19 @@ talk state c@(Client user room conn) = flip finally disconnect . forever $ do
             Nothing -> send conn $ S2CRoomDoesntExist $ RoomConfig room ""
             Just Nothing -> send conn $ S2CGameNotStarted
             Just (Just gs) -> do
-              gs' <- playCard user gs
+              let gs' = playCard user gs
+              st <- modifyMVar state $ \s -> do
+                let s' = (rooms . at room . _Just . roomGameState ?~ gs') s
+                pure (s', s')
+              broadcastGameUpdate room gs' st
+        Just C2SNextLevel -> do
+          T.putStrLn "C2SNextLevel"
+          mr <- M.lookup room . _rooms <$> readMVar state
+          case _roomGameState <$> mr of
+            Nothing -> send conn $ S2CRoomDoesntExist $ RoomConfig room ""
+            Just Nothing -> send conn $ S2CGameNotStarted
+            Just (Just gs) -> do
+              gs' <- tryNextLevel gs
               st <- modifyMVar state $ \s -> do
                 let s' = (rooms . at room . _Just . roomGameState ?~ gs') s
                 pure (s', s')
@@ -149,7 +174,7 @@ talk state c@(Client user room conn) = flip finally disconnect . forever $ do
     disconnect = do
         -- Remove client and return new state
         s <- modifyMVar state $ \s ->
-            let s' = removeClient c s in return (s', s')
+            let s' = removeClient room c s in return (s', s')
         broadcast room (S2Cbroadcast $ user <> " disconnected") s
 
 

@@ -44,7 +44,7 @@ data GameState = GameState
   { _level :: Int
   , _lives :: Int
   , _stars :: Int
-  , _lastCard :: Maybe Int
+  , _lastCard :: [Int]
   , _players :: Map Text PlayerState 
   } deriving (Eq, Show, Generic)
 makeLenses ''GameState
@@ -61,7 +61,8 @@ data MyGameState = MyGameState
   , _myLevel :: Int
   , _myLives :: Int
   , _myStars :: Int
-  , _myLastPlayedCard :: Maybe Int
+  , _myLastPlayedCard :: [Int]
+  , _myRemainingCards :: Int
   , _myCards :: [Int]
   , _myTeam  :: Map Text PlayerSummary
   } deriving (Eq, Show, Generic)
@@ -103,9 +104,15 @@ nextLevel gs = do
   ps <- newLevel levelNum playerNames
   pure $ gs & level .~ levelNum
             & players .~ ps
-            & lastCard .~ Nothing
+            & lastCard .~ []
             & awardLife levelNum
             & awardStar levelNum
+
+tryNextLevel :: GameState -> IO GameState
+tryNextLevel gs =
+  if remainingCards gs == 0
+    then nextLevel gs
+    else pure gs
 
 loseLife :: GameState -> IO GameState
 loseLife gs = do
@@ -128,7 +135,7 @@ newGame playerNames = do
       lives = numLives $ length playerNames
       stars = 1
   playerStates <- newLevel 1 playerNames
-  pure $ GameState lev lives stars Nothing playerStates
+  pure $ GameState lev lives stars [] playerStates
 
 getTopCard :: PlayerState -> Maybe Int
 getTopCard = listToMaybe . _cards
@@ -155,20 +162,17 @@ trimCards mCard gs = case mCard of
   Just c -> let ps = _players gs
                 ps' = M.map (cards %~ filter (> c)) ps
              in gs & players .~ ps'
-                   & lastCard ?~ c
+                   & lastCard %~ (c:)
 
-playCard :: Text -> GameState -> IO GameState
+playCard :: Text -> GameState -> GameState
 playCard name gs =
   let playerCard = getTopCardForPlayer name gs
       nextCard = minimumCard gs
       gs' = gs & players . at name . mapped . cards %~ tail
                & players . at name . mapped . showingTop .~ False
-               & lastCard .~ playerCard
-      gs'' = if nextCard == playerCard then gs' else gs & lives -~ 1
-                                                        & trimCards playerCard
-   in if remainingCards gs'' == 0
-        then nextLevel gs''
-        else pure gs''
+               & lastCard %~ maybe id (:) playerCard
+   in if nextCard == playerCard then gs' else gs & lives -~ 1
+                                                 & trimCards playerCard
 
 useStar :: GameState -> GameState
 useStar gs = if _stars gs <= 0
@@ -186,12 +190,13 @@ voteStar name gs =
    in if shouldUseStar then useStar gs' else gs'
 
 myGameState :: Text -> GameState -> MyGameState
-myGameState name GameState{..} =
+myGameState name gs@GameState{..} =
   let _myName = name
       _myLevel = _level
       _myLives = _lives
       _myStars = _stars
       _myLastPlayedCard = _lastCard
+      _myRemainingCards = remainingCards gs
       _myCards = maybe [] _cards $ M.lookup name _players
       f PlayerState{..} = PlayerSummary
                             (length _cards)
@@ -249,11 +254,16 @@ addClient :: Client a -> Text -> ServerState a -> ServerState a
 addClient client r = rooms . at r . _Just . roomClients %~ f
   where f = M.insert (_clientName client) client
 
-removeClient :: Client a -> ServerState a -> ServerState a
-removeClient client ss =
+removeClient :: Text -> Client a -> ServerState a -> ServerState a
+removeClient name client ss' =
   let m = M.singleton (_clientName client) client
-      updateRoom = roomClients %~ (M.\\ m)
-   in ServerState $ updateRoom <$> _rooms ss
+      updateRoom ss = case M.lookup name (_rooms ss) of
+        Nothing -> ss
+        Just r -> let r' = (roomClients %~ (M.\\ m)) r
+                   in if M.null (_roomClients r')
+                        then (rooms %~ M.delete name) ss
+                        else (rooms . at name . mapped .~ r') ss
+   in updateRoom ss'
 
 data C2S = C2Sjoin Text
          | C2Sclose
@@ -263,6 +273,7 @@ data C2S = C2Sjoin Text
          | C2SStartGame
          | C2SVoteStar Bool
          | C2SPlayCard
+         | C2SNextLevel
          deriving (Eq, Show, Generic)
 
 data S2C = S2Cwelcome Text
@@ -271,6 +282,7 @@ data S2C = S2Cwelcome Text
          | S2Cnameproblem
          | S2CRoomDoesntExist RoomConfig
          | S2CRoomAlreadyExists Text
+         | S2CRoomJoined RoomSummary
          | S2CRoomUpdate RoomSummary
          | S2CGameNotStarted
          | S2CGameUpdate MyGameState
