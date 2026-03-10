@@ -1,6 +1,4 @@
-import Backend
-import Frontend
-import Obelisk.Backend
+import qualified Backend
 
 main :: IO ()
-main = runBackend backend frontend
+main = Backend.run

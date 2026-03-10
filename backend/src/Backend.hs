@@ -1,30 +1,26 @@
-{-# LANGUAGE EmptyCase #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE LambdaCase #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE TypeFamilies #-}
-module Backend where
+module Backend (run) where
 
-import Common.Route
-import Obelisk.Backend
-import Data.Dependent.Sum (DSum (..))
-import Data.Functor.Identity
-import Control.Concurrent
+import Control.Concurrent (newMVar)
+import qualified Network.Wai.Handler.Warp as Warp
+import qualified Network.Wai.Application.Static as Static
+import qualified Network.Wai.Handler.WebSockets as WaiWS
 import qualified Network.WebSockets as WS
-import Network.WebSockets.Snap
+import WaiAppStatic.Types (ssIndices, unsafeToPiece)
 
-import qualified Backend.Examples.WebSocketChat.Server as WebSocketChat
-import qualified Common.Examples.WebSocketChat.Message as WebSocketChat
+import qualified Backend.Server as Server
+import qualified Common.Message as Message
 
-backend :: Backend BackendRoute FrontendRoute
-backend = Backend
-  { _backend_run = \serve -> do
-      webSocketChatState <- newMVar (WebSocketChat.newServerState @WS.Connection)
-      serve $ \case
-        BackendRoute_Missing :=> Identity () -> return ()
-        BackendRoute_WebSocketChat :=> Identity () -> do
-          runWebSocketsSnap (WebSocketChat.application webSocketChatState)
+run :: IO ()
+run = do
+  putStrLn "Starting The Mind server on port 8000..."
+  wsState <- newMVar (Message.newServerState @WS.Connection)
+  let wsApp = Server.application wsState
+      staticApp = Static.staticApp staticSettings
+      app = WaiWS.websocketsOr WS.defaultConnectionOptions wsApp staticApp
+  Warp.run 8000 app
 
-  , _backend_routeEncoder = backendRouteEncoder
-  }
+staticSettings :: Static.StaticSettings
+staticSettings = settings { ssIndices = [unsafeToPiece "index.html"] }
+  where settings = Static.defaultFileServerSettings "static"

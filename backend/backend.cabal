@@ -11,19 +11,18 @@ library
                , aeson
                , bytestring
                , common
-               , dependent-sum
-               , frontend
-               , lens
-               , obelisk-backend
-               , obelisk-route
-               , text
-               , websockets
-               , time
                , containers
-               , websockets-snap
+               , http-types
+               , lens
+               , text
+               , wai
+               , wai-app-static
+               , wai-websockets
+               , warp
+               , websockets
   exposed-modules:
     Backend
-    Backend.Examples.WebSocketChat.Server
+    Backend.Server
   ghc-options: -Wall
 
 executable backend
@@ -33,6 +32,4 @@ executable backend
     buildable: False
   build-depends: base
                , backend
-               , common
-               , frontend
-               , obelisk-backend
+  ghc-options: -threaded

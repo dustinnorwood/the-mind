@@ -1,6 +1,6 @@
 name: common
 version: 0.1
-cabal-version: >= 1.2
+cabal-version: >= 1.8
 build-type: Simple
 
 library
@@ -8,14 +8,9 @@ library
   build-depends: base
                , aeson
                , containers
-               , dependent-sum
                , lens
-               , mtl
-               , obelisk-route
                , QuickCheck
                , text
 
   exposed-modules:
-    Common.Api
-    Common.Route
-    Common.Examples.WebSocketChat.Message
+    Common.Message
