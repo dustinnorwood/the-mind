@@ -7,7 +7,6 @@ result-exe
 ghcid-output.txt
 .DS_Store
 .env
-docker-compose.yml
 .claude/*
 .stack-work/*
 backend/.stack-work/*
