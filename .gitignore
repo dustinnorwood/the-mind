@@ -5,3 +5,11 @@ result-ios
 result-exe
 .attr-cache
 ghcid-output.txt
+.DS_Store
+.env
+docker-compose.yml
+.claude/*
+.stack-work/*
+backend/.stack-work/*
+common/.stack-work/*
+frontend/.stack-work/*

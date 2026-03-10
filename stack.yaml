@@ -1,0 +1,21 @@
+resolver: lts-22.34
+
+packages:
+  - common/
+  - backend/
+  - frontend/
+
+extra-deps:
+  - ghcjs-dom-0.9.9.2@sha256:1169e70e90d046c7208798c22e7c0065ed00df3614c53358afaccae458c49b85,33041
+  - ghcjs-dom-jsaddle-0.9.9.0@sha256:3aa78b72a77cbe62eb3532d5b310de39ecd2f6b5dddae82f752095bf5501aecb,39626
+  - jsaddle-dom-0.9.9.2@sha256:9bd16266f4e439bc62510c251e3cb198c9b5d154296a839a13829c0bf6157edb,75693
+  - jsaddle-warp-0.9.9.2@sha256:85c592bd70640766e9b5fa33bc07d04c8cc312f678d0e2bb2e7333d5f88282b7,3374
+  - patch-0.0.8.4@sha256:00904a2f2e6b9bef71b12a5200bc047d6e108af3ad74954eed1795e419949bed,3368
+  - reflex-0.9.3.3@sha256:a9ea57dc29765968a8dc3e1c50dbe247a9dfbede1af54aa97c9fe86df3eed186,12222
+  - reflex-dom-0.6.3.4@sha256:d8065389600029e1ef6d34f3e9374e89e281f3db6273ce3aef9850313a08f525,6291
+  - reflex-dom-core-0.8.1.3@sha256:91d1aa7530e710cbe2070ce17f6c55d2f1a46c6431ee377a2f9a148ce1fcef17,8121
+
+flags:
+  reflex-dom:
+    use-warp: true
+    webkit2gtk: false

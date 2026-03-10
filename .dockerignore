@@ -1,0 +1,8 @@
+.stack-work/
+.git/
+.DS_Store
+*.o
+*.hi
+dist-newstyle/
+result
+frontend-result
