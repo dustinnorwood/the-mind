@@ -22,12 +22,6 @@ import qualified Data.Text as T
 import           GHC.Generics (Generic)
 import           Test.QuickCheck
 
-data RoomConfig = RoomConfig
-  { _roomName :: Text
-  , _roomPassword :: Text
-  } deriving (Eq, Show, Generic)
-makeLenses ''RoomConfig
-
 data GameConfig = GameConfig
   { _gamePlayerNames :: [Text]
   } deriving (Eq, Show, Generic)
@@ -252,8 +246,7 @@ data Client a = Client
 makeLenses ''Client
 
 data Room a = Room
-  { _roomConfig :: RoomConfig
-  , _roomClients :: Map Text (Client a)
+  { _roomClients :: Map Text (Client a)
   , _roomGameState :: Maybe GameState
   } deriving (Eq, Show, Functor, Generic)
 makeLenses ''Room
@@ -265,8 +258,8 @@ data RoomSummary = RoomSummary
   } deriving (Eq, Show, Generic)
 makeLenses ''RoomSummary
 
-newRoom :: RoomConfig -> Client a -> Room a
-newRoom rc c = Room rc cm Nothing
+newRoom :: Client a -> Room a
+newRoom c = Room cm Nothing
   where cm = M.singleton (_clientName c) c
 
 data ServerState a = ServerState
@@ -305,8 +298,8 @@ removeClient name client ss' =
 data C2S = C2Sjoin Text
          | C2Sclose
          | C2SChat Text
-         | C2SCreateRoom Text RoomConfig
-         | C2SJoinRoom Text RoomConfig
+         | C2SCreateRoom Text Text  -- username, roomName
+         | C2SJoinRoom Text Text    -- username, roomName
          | C2SStartGame
          | C2SVoteStar Bool
          | C2SPlayCard
@@ -315,10 +308,9 @@ data C2S = C2Sjoin Text
 
 data S2C = S2Cwelcome Text
          | S2Cbroadcast Text
-         | S2Cuserexists
-         | S2Cnameproblem
-         | S2CRoomDoesntExist RoomConfig
+         | S2CRoomDoesntExist Text
          | S2CRoomAlreadyExists Text
+         | S2CUsernameTaken Text
          | S2CRoomJoined RoomSummary
          | S2CRoomUpdate RoomSummary
          | S2CGameNotStarted
@@ -328,9 +320,6 @@ data S2C = S2Cwelcome Text
 
 options :: Options
 options = defaultOptions -- { tagSingleConstructors = True }
-
-instance ToJSON RoomConfig where toEncoding = genericToEncoding options
-instance FromJSON RoomConfig where parseJSON = genericParseJSON options
 
 instance ToJSON GameConfig where toEncoding = genericToEncoding options
 instance FromJSON GameConfig where parseJSON = genericParseJSON options

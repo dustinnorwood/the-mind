@@ -36,7 +36,7 @@ app
   => Text -> m ()
 app wsUrl = do
   rec
-    msgEvDyn <- widgetHold loginWidget (ffor loggedInEv (startGameWidget msgRecEv))
+    msgEvDyn <- widgetHold (loginWidget msgRecEv) (ffor loggedInEv (startGameWidget msgRecEv))
     let
       msgSendEv = switch (current msgEvDyn)
       msgRecEv = fmapMaybe decodeOneMsg wsRespEv
@@ -59,16 +59,25 @@ app wsUrl = do
 loginWidget
   :: ( DomBuilder t m
      , MonadFix m
+     , MonadHold t m
      , PostBuild t m
      , PerformEvent t m
      , Prerender t m
      )
-  => m (Event t C2S)
-loginWidget = elClass "div" "login-screen" $ do
+  => Event t S2C -> m (Event t C2S)
+loginWidget s2cEv = elClass "div" "login-screen" $ do
   rec
-    (tUser, tName, tPass, createRoom, joinRoom) <- elClass "div" "login-card" $ do
+    (tUser, tName, createRoom, joinRoom) <- elClass "div" "login-card" $ do
       elClass "div" "login-title" $ text "THE MIND"
       elClass "div" "login-subtitle" $ text "A Multiplayer Card Game"
+
+      -- Error display
+      let errorEv = fmapMaybe loginError s2cEv
+      errorDyn <- holdDyn Nothing (leftmost [Just <$> errorEv, Nothing <$ eSubmit])
+      void $ dyn $ ffor errorDyn $ \case
+        Nothing -> blank
+        Just err -> elClass "div" "notification notification-error" $ text err
+
       tu <- elClass "div" "input-group" $ do
         elClass "label" "input-label" $ text "Username"
         inputElement $ def
@@ -78,26 +87,26 @@ loginWidget = elClass "div" "login-screen" $ do
       tn <- elClass "div" "input-group" $ do
         elClass "label" "input-label" $ text "Room Name"
         inputElement $ def
-          & inputElementConfig_setValue .~ fmap (const "") eSubmit
+          & inputElementConfig_setValue .~ never
           & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
             ("placeholder" =: "Enter room name" <> "class" =: "game-input")
-      tp <- elClass "div" "input-group" $ do
-        elClass "label" "input-label" $ text "Password"
-        inputElement $ def
-          & inputElementConfig_setValue .~ fmap (const "") eSubmit
-          & inputElementConfig_elementConfig . elementConfig_initialAttributes .~
-            ("placeholder" =: "Enter password" <> "class" =: "game-input" <> "type" =: "password")
       elClass "div" "button-group" $ do
         cr <- elClass' "button" "btn btn-primary" $ text "Create Room"
         jr <- elClass' "button" "btn btn-secondary" $ text "Join Room"
-        pure (tu, tn, tp, domEvent Click (fst cr), domEvent Click (fst jr))
-    let ev f = tag ((\a b c -> f a (RoomConfig b c)) <$> (fmap T.strip . current $ value tUser)
-                      <*> (fmap T.strip . current $ value tName)
-                      <*> (fmap T.strip . current $ value tPass))
+        pure (tu, tn, domEvent Click (fst cr), domEvent Click (fst jr))
+    let ev f = tag ((\a b -> f a b) <$> (fmap T.strip . current $ value tUser)
+                      <*> (fmap T.strip . current $ value tName))
         eCreate = ev C2SCreateRoom createRoom
         eJoin = ev C2SJoinRoom joinRoom
         eSubmit = leftmost [eCreate, eJoin]
   return eSubmit
+  where
+    loginError :: S2C -> Maybe Text
+    loginError = \case
+      S2CRoomAlreadyExists name -> Just $ "Room \"" <> name <> "\" already exists"
+      S2CRoomDoesntExist name   -> Just $ "Room \"" <> name <> "\" does not exist"
+      S2CUsernameTaken name     -> Just $ "Username \"" <> name <> "\" is already taken in this room"
+      _ -> Nothing
 
 -- Post-login: room lobby or game
 startGameWidget
