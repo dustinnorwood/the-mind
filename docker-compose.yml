@@ -16,9 +16,9 @@ services:
       dockerfile: Dockerfile
       target: frontend-runtime
     environment:
-      - GAME_WS_URL=ws://${PUBLIC_HOST:-localhost}/game-ws
+      - GAME_WS_URL=wss://${PUBLIC_HOST:-localhost}/game-ws
     expose:
-      - "3911"
+      - "3003"
     networks:
       - app-network
     restart: unless-stopped
@@ -27,14 +27,36 @@ services:
     image: nginx:alpine
     ports:
       - "80:80"
+      - "443:443"
     volumes:
-      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf.template:ro
+      - certbot-webroot:/var/www/certbot:ro
+      - certbot-certs:/etc/letsencrypt:ro
+    environment:
+      - PUBLIC_HOST=${PUBLIC_HOST:-localhost}
+    command: >
+      /bin/sh -c "envsubst '$$PUBLIC_HOST' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+      && nginx -g 'daemon off;'"
     depends_on:
       - backend
       - frontend
     networks:
       - app-network
     restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot
+    volumes:
+      - certbot-webroot:/var/www/certbot
+      - certbot-certs:/etc/letsencrypt
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done'"
+    networks:
+      - app-network
+    restart: unless-stopped
+
+volumes:
+  certbot-webroot:
+  certbot-certs:
 
 networks:
   app-network:
