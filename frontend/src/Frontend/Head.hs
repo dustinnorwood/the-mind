@@ -12,6 +12,7 @@ pageHead = do
   elAttr "link" ("rel" =: "preconnect" <> "href" =: "https://fonts.googleapis.com") blank
   elAttr "link" ("rel" =: "preconnect" <> "href" =: "https://fonts.gstatic.com" <> "crossorigin" =: "") blank
   elAttr "link" ("rel" =: "stylesheet" <> "href" =: "https://fonts.googleapis.com/css2?family=Creepster&family=Nosifer&family=Montserrat:wght@400;600;700&display=swap") blank
+  elAttr "link" ("rel" =: "icon" <> "type" =: "image/svg+xml" <> "href" =: faviconDataUri) blank
   el "style" $ text css
 
 css :: Text
@@ -348,3 +349,10 @@ css = "\
   \::-webkit-scrollbar-track { background: transparent; }\n\
   \::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 3px; }\n\
   \"
+
+faviconDataUri :: Text
+faviconDataUri = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E\
+  \%3Crect width='64' height='64' rx='12' fill='%230b0e1a'/%3E\
+  \%3Cstyle%3E@import url('https://fonts.googleapis.com/css2?family=Nosifer')%3C/style%3E\
+  \%3Ctext x='32' y='44' text-anchor='middle' font-family='Nosifer,cursive' font-size='26' fill='%23d4a834'%3ETM%3C/text%3E\
+  \%3C/svg%3E"
